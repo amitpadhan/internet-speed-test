@@ -1,6 +1,6 @@
 /**
  * Quantum Speed - Internet Speed Test Engine
- * Order: Ping → Download → Upload
+ * Order: Ping → Download → Upload (Sequential)
  */
 
 /* ─────────────────────────────────────────────
@@ -43,7 +43,7 @@
 
     function init() {
         resize();
-        particles = Array.from({ length: 120 }, () => new Particle());
+        particles = Array.from({ length: 100 }, () => new Particle());
     }
 
     function loop() {
@@ -69,44 +69,47 @@ class SpeedTest {
         this.pingUrl     = 'https://speed.cloudflare.com/__down?bytes=0';
 
         // --- Speedometer arc constants ---
-        // SVG path: M 30 160 A 120 120 0 0 1 270 160  →  half-circle, r=120
-        // Arc length = π * 120 ≈ 377
-        this.ARC_LENGTH  = 377;
-        this.MAX_SPEED   = 150; // Mbps — needle pegs at this value
+        // Arc length = 371
+        this.ARC_LENGTH  = 371;
+        this.MAX_SPEED   = 150; // Mbps
 
         // --- DOM elements ---
         this.el = {
             svgSpeed:     document.getElementById('svg-speed'),
             svgUnit:      document.getElementById('svg-unit'),
             svgMbs:       document.getElementById('svg-mbs'),
-            svgPhase:     document.getElementById('svg-phase'),
             meterFill:    document.getElementById('meter-fill'),
             needleGroup:  document.getElementById('needle-group'),
+            
             downloadVal:  document.getElementById('download-speed'),
             downloadMBps: document.getElementById('download-MBps'),
             uploadVal:    document.getElementById('upload-speed'),
             uploadMBps:   document.getElementById('upload-MBps'),
             pingVal:      document.getElementById('ping-value'),
-            jitterVal:    document.getElementById('jitter-value'),
+            
             startBtn:     document.getElementById('start-btn'),
             btnText:      document.getElementById('btn-text'),
+            
             ipAddress:    document.getElementById('ip-address'),
             ispName:      document.getElementById('isp-name'),
             locationInfo: document.getElementById('location-info'),
+            
             dlBar:        document.getElementById('download-bar'),
             ulBar:        document.getElementById('upload-bar'),
             pingBar:      document.getElementById('ping-bar'),
-            jitterBar:    document.getElementById('jitter-bar'),
+            
             cardPing:     document.getElementById('card-ping'),
             cardDl:       document.getElementById('card-download'),
             cardUl:       document.getElementById('card-upload'),
-            cardJitter:   document.getElementById('card-jitter'),
+            
             phasePing:    document.getElementById('phase-ping'),
             phaseDl:      document.getElementById('phase-download'),
             phaseUl:      document.getElementById('phase-upload'),
+            
+            conn1:        document.getElementById('conn-1'),
+            conn2:        document.getElementById('conn-2'),
         };
 
-        // Ensure meter-fill dasharray matches ARC_LENGTH
         this.el.meterFill.style.strokeDasharray  = this.ARC_LENGTH;
         this.el.meterFill.style.strokeDashoffset = this.ARC_LENGTH;
 
@@ -134,38 +137,39 @@ class SpeedTest {
     }
 
     /* ── Speedometer Update ── */
-    updateMeter(speedMbps) {
-        const clamped = Math.min(speedMbps, this.MAX_SPEED);
-        const pct     = clamped / this.MAX_SPEED;
+    updateMeter(value, type = 'speed') {
+        let pct = 0;
+        if (type === 'speed') {
+            const clamped = Math.min(value, this.MAX_SPEED);
+            pct = clamped / this.MAX_SPEED;
+            const speedMBps = value / 8;
+            this.el.svgSpeed.textContent = value.toFixed(2);
+            this.el.svgMbs.textContent   = `${speedMBps.toFixed(2)} MB/s`;
+            this.el.svgUnit.textContent  = 'MBPS';
+        } else if (type === 'ping') {
+            // Reverse mapping for ping: lower is better, let's map 0-200ms to the meter
+            const clamped = Math.min(value, 200);
+            pct = 1 - (clamped / 200); // 0ms = 100%, 200ms = 0%
+            this.el.svgSpeed.textContent = value.toFixed(0);
+            this.el.svgMbs.textContent   = `LATENCY`;
+            this.el.svgUnit.textContent  = 'MS';
+        }
 
-        // Arc fill: offset shrinks as speed grows
         this.el.meterFill.style.strokeDashoffset = this.ARC_LENGTH - pct * this.ARC_LENGTH;
-
-        // Needle: -90deg = left (0 Mbps), +90deg = right (MAX Mbps)
-        // SVG transform attribute for reliable pivot
         const angle = -90 + pct * 180;
-        this.el.needleGroup.setAttribute('transform',
-            `rotate(${angle}, 150, 160)`);
-
-        // SVG text updates
-        const speedMBps = speedMbps / 8;
-        this.el.svgSpeed.textContent = speedMbps.toFixed(2);
-        this.el.svgMbs.textContent   = `${speedMBps.toFixed(2)} MB/s`;
-    }
-
-    /* ── Phase label ── */
-    setPhaseLabel(text) {
-        this.el.svgPhase.textContent = text.toUpperCase();
+        this.el.needleGroup.setAttribute('transform', `rotate(${angle}, 150, 158)`);
     }
 
     /* ── Phase Step Helpers ── */
     setPhase(name) {
-        // Deactivate all
+        // Reset steps
         ['phasePing', 'phaseDl', 'phaseUl'].forEach(k => {
             this.el[k].classList.remove('active', 'done');
         });
+        this.el.conn1.classList.remove('active');
+        this.el.conn2.classList.remove('active');
 
-        // Mark previous phases done
+        // Mark active/done
         const order = ['phasePing', 'phaseDl', 'phaseUl'];
         const idx   = { ping: 0, download: 1, upload: 2 }[name];
         order.forEach((k, i) => {
@@ -174,10 +178,8 @@ class SpeedTest {
         });
 
         // Connectors
-        const connectors = document.querySelectorAll('.phase-connector');
-        connectors.forEach((c, i) => {
-            c.classList.toggle('active', i < idx);
-        });
+        if (idx > 0) this.el.conn1.classList.add('active');
+        if (idx > 1) this.el.conn2.classList.add('active');
     }
 
     setAllDone() {
@@ -185,7 +187,8 @@ class SpeedTest {
             this.el[k].classList.remove('active');
             this.el[k].classList.add('done');
         });
-        document.querySelectorAll('.phase-connector').forEach(c => c.classList.add('active'));
+        this.el.conn1.classList.add('active');
+        this.el.conn2.classList.add('active');
     }
 
     activateCard(card) {
@@ -193,20 +196,19 @@ class SpeedTest {
         if (card) card.classList.add('active');
     }
 
+    /* ── Reset UI ── */
     resetUI() {
-        this.updateMeter(0);
-        this.setPhaseLabel('Ready to Test');
-        ['downloadVal','uploadVal','pingVal','jitterVal'].forEach(k => {
+        this.updateMeter(0, 'speed');
+        ['downloadVal','uploadVal','pingVal'].forEach(k => {
             this.el[k].textContent = '--';
         });
         this.el.downloadMBps.textContent = '-- MB/s';
         this.el.uploadMBps.textContent   = '-- MB/s';
-        [this.el.dlBar, this.el.ulBar, this.el.pingBar, this.el.jitterBar].forEach(b => {
+        [this.el.dlBar, this.el.ulBar, this.el.pingBar].forEach(b => {
             b.style.width = '0%';
         });
-        document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-        document.querySelectorAll('.phase-step').forEach(s => s.classList.remove('active','done'));
-        document.querySelectorAll('.phase-connector').forEach(c => c.classList.remove('active'));
+        this.activateCard(null);
+        this.setPhase('ping');
     }
 
     /* ── Main Test Sequence ── */
@@ -216,20 +218,18 @@ class SpeedTest {
         this.resetUI();
 
         try {
-            /* 1. Ping & Jitter */
-            this.setPhaseLabel('Measuring Latency...');
+            /* 1. Ping */
             this.setPhase('ping');
             this.activateCard(this.el.cardPing);
-            const { ping, jitter } = await this.runPingTest();
-
+            const ping = await this.runPingTest();
+            
             this.el.pingVal.textContent   = ping.toFixed(0);
-            this.el.jitterVal.textContent = jitter.toFixed(0);
             this.el.pingBar.style.width   = `${Math.min(ping / 200, 1) * 100}%`;
-            this.el.jitterBar.style.width = `${Math.min(jitter / 50, 1) * 100}%`;
-            this.el.cardJitter.classList.add('active');
+            this.updateMeter(ping, 'ping');
+            await new Promise(r => setTimeout(r, 800)); // Pause to show ping on meter
 
             /* 2. Download */
-            this.setPhaseLabel('Download Speed...');
+            this.updateMeter(0, 'speed');
             this.setPhase('download');
             this.activateCard(this.el.cardDl);
             const dlMbps = await this.runDownloadTest();
@@ -237,9 +237,10 @@ class SpeedTest {
             this.el.downloadVal.textContent  = dlMbps.toFixed(2);
             this.el.downloadMBps.textContent = `${(dlMbps / 8).toFixed(2)} MB/s`;
             this.el.dlBar.style.width        = `${Math.min(dlMbps / this.MAX_SPEED, 1) * 100}%`;
+            await new Promise(r => setTimeout(r, 800)); // Pause
 
             /* 3. Upload */
-            this.setPhaseLabel('Upload Speed...');
+            this.updateMeter(0, 'speed');
             this.setPhase('upload');
             this.activateCard(this.el.cardUl);
             const ulMbps = await this.runUploadTest();
@@ -250,33 +251,32 @@ class SpeedTest {
 
             /* Done */
             this.setAllDone();
-            document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('active'));
-            this.updateMeter(0);
-            this.setPhaseLabel('Test Complete');
+            this.activateCard(null);
+            this.updateMeter(0, 'speed');
+            this.el.btnText.textContent = 'Run Again';
 
         } catch (err) {
             console.error('Speed test error:', err);
-            this.setPhaseLabel('Test Failed');
+            this.el.btnText.textContent = 'Error - Retry';
         } finally {
             this.el.startBtn.disabled = false;
-            this.el.btnText.textContent = 'Run Again';
         }
     }
 
-    /* ── Ping Test (10 samples) ── */
+    /* ── Ping Test ── */
     async runPingTest() {
         const pings = [];
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 5; i++) {
             const t0 = performance.now();
             await fetch(`${this.pingUrl}&r=${Math.random()}`, { cache: 'no-store', mode: 'no-cors' });
             pings.push(performance.now() - t0);
+            this.updateMeter(pings[pings.length-1], 'ping');
+            await new Promise(r => setTimeout(r, 100));
         }
-        const avg    = pings.reduce((a, b) => a + b, 0) / pings.length;
-        const jitter = pings.slice(1).reduce((acc, v, i) => acc + Math.abs(v - pings[i]), 0) / (pings.length - 1);
-        return { ping: avg, jitter };
+        return pings.reduce((a, b) => a + b, 0) / pings.length;
     }
 
-    /* ── Download Test (streaming, real-time gauge) ── */
+    /* ── Download Test ── */
     async runDownloadTest() {
         const startTime = performance.now();
         const res       = await fetch(`${this.downloadUrl}&r=${Math.random()}`, { cache: 'no-store' });
@@ -289,8 +289,7 @@ class SpeedTest {
             received += value.length;
             const elapsed  = (performance.now() - startTime) / 1000;
             const speedMbps = (received * 8) / elapsed / 1e6;
-            this.updateMeter(speedMbps);
-            // live-update download card
+            this.updateMeter(speedMbps, 'speed');
             this.el.downloadVal.textContent  = speedMbps.toFixed(2);
             this.el.downloadMBps.textContent = `${(speedMbps / 8).toFixed(2)} MB/s`;
             this.el.dlBar.style.width        = `${Math.min(speedMbps / this.MAX_SPEED, 1) * 100}%`;
@@ -300,23 +299,27 @@ class SpeedTest {
         return (received * 8) / total / 1e6;
     }
 
-    /* ── Upload Test (XHR with live progress) ── */
+    /* ── Upload Test ── */
     runUploadTest() {
         return new Promise((resolve, reject) => {
             const SIZE  = 5 * 1024 * 1024; // 5 MB
             const data  = new Uint8Array(SIZE);
-            // Fill with pseudo-random data (avoids crypto quota limit)
+            // Pre-fill data
             for (let i = 0; i < SIZE; i++) data[i] = (Math.random() * 256) | 0;
 
             const xhr       = new XMLHttpRequest();
-            const startTime = performance.now();
+            let startTime;
+
+            xhr.upload.onloadstart = () => {
+                startTime = performance.now();
+            };
 
             xhr.upload.onprogress = (e) => {
-                if (!e.lengthComputable) return;
+                if (!e.lengthComputable || !startTime) return;
                 const elapsed  = (performance.now() - startTime) / 1000;
                 if (elapsed < 0.1) return;
                 const speedMbps = (e.loaded * 8) / elapsed / 1e6;
-                this.updateMeter(speedMbps);
+                this.updateMeter(speedMbps, 'speed');
                 this.el.uploadVal.textContent  = speedMbps.toFixed(2);
                 this.el.uploadMBps.textContent = `${(speedMbps / 8).toFixed(2)} MB/s`;
                 this.el.ulBar.style.width      = `${Math.min(speedMbps / this.MAX_SPEED, 1) * 100}%`;
@@ -327,8 +330,7 @@ class SpeedTest {
                 resolve((SIZE * 8) / elapsed / 1e6);
             };
 
-            xhr.onerror   = () => {
-                // Fallback: resolve with estimated value if CORS blocks the response
+            xhr.onerror = () => {
                 const elapsed = (performance.now() - startTime) / 1000;
                 resolve((SIZE * 8) / elapsed / 1e6);
             };
