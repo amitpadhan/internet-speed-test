@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Speed | Ultimate Internet Speed Test</title>
+    <meta name="description" content="Experience the fastest and most accurate internet speed test with Quantum Speed. Real-time metrics for download, upload, ping, and jitter.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Animated Background -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <canvas id="particle-canvas"></canvas>
+
+    <main class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon-wrap">⚡</div>
+                <span class="logo-text">QUANTUM SPEED</span>
+            </div>
+            <div class="status-badge" id="network-status">
+                <span class="dot pulse"></span>
+                <span class="status-text">Connected</span>
+            </div>
+        </header>
+
+        <section class="test-dashboard">
+
+            <!-- Speedometer Meter -->
+            <div class="meter-section">
+                <div class="speedometer-wrap">
+                    <svg class="speedometer" viewBox="0 0 300 270" id="speedometer-svg">
+                        <defs>
+                            <linearGradient id="meterGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#00e5ff"/>
+                                <stop offset="50%" style="stop-color:#a855f7"/>
+                                <stop offset="100%" style="stop-color:#ff6b6b"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Arc track -->
+                        <path class="meter-track" d="M 30 160 A 120 120 0 0 1 270 160" fill="none" stroke-width="18" stroke-linecap="round"/>
+                        <!-- Arc progress -->
+                        <path class="meter-fill" id="meter-fill" d="M 30 160 A 120 120 0 0 1 270 160" fill="none" stroke-width="18" stroke-linecap="round"/>
+                        <!-- Needle pivot -->
+                        <g id="needle-group">
+                            <line id="needle" x1="150" y1="160" x2="150" y2="55" stroke="rgba(255,255,255,0.9)" stroke-width="2.5" stroke-linecap="round"/>
+                            <circle cx="150" cy="160" r="9" fill="white" opacity="0.15"/>
+                            <circle cx="150" cy="160" r="5" fill="white"/>
+                            <circle cx="150" cy="160" r="2" fill="#080812"/>
+                        </g>
+                        <!-- Arc labels -->
+                        <text x="26" y="178" class="arc-label">0</text>
+                        <text x="62" y="108" class="arc-label">25</text>
+                        <text x="150" y="62" class="arc-label">50</text>
+                        <text x="238" y="108" class="arc-label">75</text>
+                        <text x="263" y="178" class="arc-label">100+</text>
+                        <!-- Speed value text -->
+                        <text id="svg-speed" x="150" y="210" class="svg-speed-val" text-anchor="middle">0.00</text>
+                        <text id="svg-unit" x="150" y="230" class="svg-unit-label" text-anchor="middle">MBPS</text>
+                        <text id="svg-mbs" x="150" y="248" class="svg-mbs-label" text-anchor="middle">0.00 MB/s</text>
+                        <text id="svg-phase" x="150" y="266" class="svg-phase-label" text-anchor="middle">READY TO TEST</text>
+                    </svg>
+
+                    <!-- Speed text is now rendered inside the SVG above -->
+                </div>
+
+                <!-- Phase Progress Bar -->
+                <div class="phase-bar-wrap">
+                    <div class="phase-steps">
+                        <div class="phase-step" id="phase-ping">
+                            <div class="phase-dot"></div>
+                            <span>Ping</span>
+                        </div>
+                        <div class="phase-connector"></div>
+                        <div class="phase-step" id="phase-download">
+                            <div class="phase-dot"></div>
+                            <span>Download</span>
+                        </div>
+                        <div class="phase-connector"></div>
+                        <div class="phase-step" id="phase-upload">
+                            <div class="phase-dot"></div>
+                            <span>Upload</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card" id="card-ping">
+                    <div class="stat-icon-wrap ping-icon">📡</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Ping</span>
+                        <div class="stat-value-row">
+                            <span class="stat-value" id="ping-value">--</span>
+                            <span class="unit">ms</span>
+                        </div>
+                        <div class="stat-bar-bg"><div class="stat-bar" id="ping-bar"></div></div>
+                    </div>
+                </div>
+                <div class="stat-card" id="card-jitter">
+                    <div class="stat-icon-wrap jitter-icon">〰️</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Jitter</span>
+                        <div class="stat-value-row">
+                            <span class="stat-value" id="jitter-value">--</span>
+                            <span class="unit">ms</span>
+                        </div>
+                        <div class="stat-bar-bg"><div class="stat-bar" id="jitter-bar"></div></div>
+                    </div>
+                </div>
+                <div class="stat-card" id="card-download">
+                    <div class="stat-icon-wrap download-icon">⬇</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Download</span>
+                        <div class="stat-value-row">
+                            <span class="stat-value" id="download-speed">--</span>
+                            <span class="unit">Mbps</span>
+                        </div>
+                        <div class="stat-sub" id="download-MBps">-- MB/s</div>
+                        <div class="stat-bar-bg"><div class="stat-bar download-bar" id="download-bar"></div></div>
+                    </div>
+                </div>
+                <div class="stat-card" id="card-upload">
+                    <div class="stat-icon-wrap upload-icon">⬆</div>
+                    <div class="stat-info">
+                        <span class="stat-label">Upload</span>
+                        <div class="stat-value-row">
+                            <span class="stat-value" id="upload-speed">--</span>
+                            <span class="unit">Mbps</span>
+                        </div>
+                        <div class="stat-sub" id="upload-MBps">-- MB/s</div>
+                        <div class="stat-bar-bg"><div class="stat-bar upload-bar" id="upload-bar"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="start-btn" class="primary-btn">
+                    <span class="btn-icon">▶</span>
+                    <span id="btn-text">Start Speed Test</span>
+                </button>
+            </div>
+        </section>
+
+        <footer>
+            <div class="system-info">
+                <span class="info-pill" id="ip-address">🌐 Detecting IP...</span>
+                <span class="info-pill" id="isp-name">🏢 Detecting Provider...</span>
+                <span class="info-pill" id="location-info">📍 Detecting Location...</span>
+            </div>
+        </footer>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
